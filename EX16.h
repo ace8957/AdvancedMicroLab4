@@ -41,6 +41,7 @@ int ReadKEY( void);         // check the 4 button inputs status
 
 void InitADC( int amask);   // initialize ADC and analog pins
 int ReadADC( int ch);       // sample/convert one analog input
+double convertRaw(int temp);
 
 #endif
 

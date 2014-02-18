@@ -2,7 +2,7 @@
 ** Temp.c
 ** Converting the analog signal from a TC1047 Temperature Sensor
 */
-#include <EX16.h>
+#include "EX16.h"
 #include <config.h>
 #include <stdio.h>
 #include "LCD.h"
@@ -10,28 +10,65 @@
 #define TEMP_CH   4         // ch 4 = TC1047 Temperature sensor 
 #define TEMPMASK  0xffef    // AN4 as analog input
 #define NUM_SAMPLES   5
-#define ERROR_BOUND 2
-#define ERROR_DIFF 5
+#define ERROR_BOUND 3
+#define ERROR_DIFF 2
 
 void displayInstructions(void) {
+    ClrLCD();
+    SetLCDC(0x0);
     putsLCD("Place finger on");
     SetLCDC(0x40);
     putsLCD("TC1047 to begin.");
+    Delayms(1000);
+}
+
+void displayErrorMessage(void) {
+    ClrLCD();
+    SetLCDC(0x0);
+    putsLCD("Error");
+    SetLCDC(0x40);
+    putsLCD("Leave Finger in");
+    Delayms(2000);
+    SetLCDC(0x0);
+    putsLCD("Position for");
+    SetLCDC(0x40);
+    putsLCD("a Longer Time.  ");
+    Delayms(2000);
 }
 
 int checkPrevious(int * a, int ref) {
-    int i;
-    for(i = 1; i < NUM_SAMPLES; ++i) {
-        //return nonzero if the reading is outside of the ERROR_BOUND away from
-        //the previous value in the buffer or if the value differs by less than
-        //ERROR_DIFF from the reference value
-        if((a[i] <= (a[i-1] + ERROR_BOUND)) || 
-                (a[i] >= (a[i-1] - ERROR_BOUND)) ||
-                (a[i] <= ref + ERROR_DIFF)  ||
-                (a[i] >= ref - ERROR_DIFF)) {
+    int i, j;
+    
+    for(i = 0; i < NUM_SAMPLES; ++i) {
+        //check to make sure all values differ from the ref by at least
+        //ERROR_DIFF amount
+        if((a[i] > (ref - ERROR_DIFF)) && (a[i] < (ref + ERROR_DIFF))) {
+            if(i > 2)
+                displayErrorMessage();
             return 1;
         }
+        for(j = 0; j < NUM_SAMPLES; ++j) {
+            //check if not within error bound of other values
+            if((a[i] < (a[j] - ERROR_BOUND)) || (a[i] > (a[j] + ERROR_BOUND))) {
+                if(i >2)
+                    displayErrorMessage();
+                return 1;
+            }
+            
+        }
     }
+//    for(i = 1; i < NUM_SAMPLES; ++i) {
+//        //return nonzero if the reading is outside of the ERROR_BOUND away from
+//        //the previous value in the buffer or if the value differs by less than
+//        //ERROR_DIFF from the reference value
+//        if((a[i] >= (a[i-1] + ERROR_BOUND)) ||
+//                (a[i] <= (a[i-1] - ERROR_BOUND)) ||
+//                (a[i] <= ref + ERROR_DIFF)  ||
+//                (a[i] >= ref - ERROR_DIFF)) {
+//            return 1;
+//        }
+//    }
+    
     return 0;
 }
 
@@ -48,14 +85,14 @@ void displayTemperature(int * a) {
     temp /= NUM_SAMPLES;
     ClrLCD();
     SetLCDC(0x0);
-    sprintf(output, "Temp: %d", temp);
+    sprintf(output, "Temp: %.2f", convertRaw(temp));
     putsLCD(output);
 }
 
 int main ()
 {
     int temp, ref, pos, j;
-    int temps[NUM_SAMPLES];
+    int temps[NUM_SAMPLES] = {0};
 
     InitLCD();
     displayInstructions();
@@ -84,7 +121,10 @@ int main ()
         if(!checkPrevious(temps, ref)) { //all are within bounds of each other
             displayTemperature(temps);
             Delayms(5000);
+            displayInstructions();
         }
+
+        Delayms(125);
 
         // 3.2 compare with initial reading, move bar 1 dot/C
         pos = 3 + (temp - ref);

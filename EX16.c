@@ -6,7 +6,7 @@
 **              GB1/GA1 PIMs to be used with the EX16 board 
 **    08/06/10 - LDJ, Modified to use the PIC24 peripheral lib
 */
-#include <EX16.h>
+#include "EX16.h"
 
 void InitEX16( void)
 {
@@ -156,14 +156,14 @@ int GetKEY( void)
 void InitADC( int amask) 
 {
     AD1PCFG = amask;    // select analog input pins
-    AD1CON1 = 0x0040;   // auto convert after end of sampling
+    AD1CON1 = 0x00E0;   // auto convert after end of sampling
     AD1CSSL = 0;        // no scanning required 
     AD1CON3 = 0x1F3F;   // max sample time = 31Tad, Tad = 2 x Tcy 
     AD1CON2 = 0x003C;   // use MUXA, AVss and AVdd are used as Vref+/-
 
-    TMR3 = 0x0000; // set TMR3 to time out every 125 ms
-    PR3 = 0x3FFF;
-    T3CON = 0x8010;
+//    TMR3 = 0x0000; // set TMR3 to time out every 125 ms
+//    PR3 = 0x3FFF;
+//    T3CON = 0x8010;
     
     AD1CON1bits.ADON = 1; // turn on the ADC
     AD1CON1bits.ASAM = 1; //turn on auto sampling
@@ -196,6 +196,12 @@ int averageFifo(void) {
     return tmp;
 }
 
+//this function will take a raw ADC value and convert it's corresponding value
+//in degrees Celsius
+double convertRaw(int temp) {
+    return ((3.3*temp)-500)/10;
+}
+
 // sample/convert one analog input
 int ReadADC( int ch)
 {
@@ -205,6 +211,7 @@ int ReadADC( int ch)
     //while (!AD1CON1bits.DONE);   // wait to complete the conversion
     while (!IFS0bits.AD1IF); //check for a finished conversion, full buffer
     temp = averageFifo();
+//    temp = convertRaw(temp);
     IFS0bits.AD1IF = 0;
     return temp;            // read the conversion result
 } // readADC
