@@ -10,8 +10,8 @@
 #define TEMP_CH   4         // ch 4 = TC1047 Temperature sensor 
 #define TEMPMASK  0xffef    // AN4 as analog input
 #define NUM_SAMPLES   5
-#define ERROR_BOUND 3
-#define ERROR_DIFF 2
+#define ERROR_BOUND 4
+#define ERROR_DIFF 3
 
 void displayInstructions(void) {
     ClrLCD();
@@ -34,6 +34,7 @@ void displayErrorMessage(void) {
     SetLCDC(0x40);
     putsLCD("a Longer Time.  ");
     Delayms(2000);
+    ClrLCD();
 }
 
 int checkPrevious(int * a, int ref) {
@@ -43,39 +44,31 @@ int checkPrevious(int * a, int ref) {
         //check to make sure all values differ from the ref by at least
         //ERROR_DIFF amount
         if((a[i] > (ref - ERROR_DIFF)) && (a[i] < (ref + ERROR_DIFF))) {
-            if(i > 2)
-                displayErrorMessage();
             return 1;
         }
         for(j = 0; j < NUM_SAMPLES; ++j) {
             //check if not within error bound of other values
+            //if we have several values which meet the criteria,
+            //leave finger on the sensor longer
             if((a[i] < (a[j] - ERROR_BOUND)) || (a[i] > (a[j] + ERROR_BOUND))) {
-                if(i >2)
-                    displayErrorMessage();
                 return 1;
             }
             
         }
     }
-//    for(i = 1; i < NUM_SAMPLES; ++i) {
-//        //return nonzero if the reading is outside of the ERROR_BOUND away from
-//        //the previous value in the buffer or if the value differs by less than
-//        //ERROR_DIFF from the reference value
-//        if((a[i] >= (a[i-1] + ERROR_BOUND)) ||
-//                (a[i] <= (a[i-1] - ERROR_BOUND)) ||
-//                (a[i] <= ref + ERROR_DIFF)  ||
-//                (a[i] >= ref - ERROR_DIFF)) {
-//            return 1;
-//        }
-//    }
     
+    return 0;
+}
+
+int withinTolerance(int t, int ref) {
+    if((t > (ref - ERROR_DIFF)) && (t < (ref + ERROR_DIFF))) {
+            return 1;
+    }
     return 0;
 }
 
 void displayTemperature(int * a) {
     //display the temperature to the user
-    //TODO: make this an actual celsius value
-    //the temperature will be the average of those in the buffer
     int i;
     int temp = 0;
     char output[16];
@@ -85,58 +78,69 @@ void displayTemperature(int * a) {
     temp /= NUM_SAMPLES;
     ClrLCD();
     SetLCDC(0x0);
-    sprintf(output, "Temp: %.2f", convertRaw(temp));
+    sprintf(output, "Temp: %.2f Cel.", convertRaw(temp));
     putsLCD(output);
 }
 
 int main ()
 {
-    int temp, ref, pos, j;
-    int temps[NUM_SAMPLES] = {0};
+    int temp, ref, j;
+    int display_flag = 0;//flag to regulate temp display
+    int buffer_flag = 0;//flag to regulate filling of the buffer
+    int temps[NUM_SAMPLES] = {0};//buffer of raw adc readings
 
-    InitLCD();
-    displayInstructions();
+    InitLCD();//initialize the LCD
+    displayInstructions();//display the instructions
     
-    // 1. initializations
     InitADC( TEMPMASK);  // initialize ADC Explorer16 inputs
-    TRISA = 0xff00;      // select PORTA pins as outputs
 
+    Delayms(125);//wait for buffer to fill
 
-    // 2. get the central bar reference
-    temp = 0;
-//    for ( j= 16; j >0; j--)
-//         temp += ReadADC( TEMP_CH);  // read the temperature
-//    ref = temp >> 4;
-    ref = ReadADC(TEMP_CH);
+    ref = ReadADC(TEMP_CH);//get an initial reference point
 
-    // 3.0 main loop
-    j=0;
-    while( 1)
+    //main loop
+    j=0;//zero the buffer counter
+    while(1)
     {
 
-        temps[j] = ReadADC(TEMP_CH);
-        j++;
-        if(j == NUM_SAMPLES) j=0;
+        temp = ReadADC(TEMP_CH);//get adc reading
+        if(!withinTolerance(temp,ref) && !buffer_flag) {//check tolerances
+            buffer_flag = 1;
+            j = 0;
+        }
+        if(buffer_flag) {//temp outside normal tolerance, begin filling buffer
+            if(withinTolerance(temp, ref)) {//no longer outside tolerance
+                buffer_flag = 0;
+                displayErrorMessage();
+                displayInstructions();
+            }
+            else {
+                temps[j] = temp;
+                j++;
+                if(j==NUM_SAMPLES) j=0;
+            }
+        }
 
-        if(!checkPrevious(temps, ref)) { //all are within bounds of each other
-            displayTemperature(temps);
-            Delayms(5000);
+        //all are within bounds of each other and outside min. tolerance
+        if(!checkPrevious(temps, ref) && buffer_flag && j==(NUM_SAMPLES-1)) {
+            buffer_flag = 0;
+            displayTemperature(temps);//display the new temperature
+            if(display_flag)
+                Delayms(3000);
+            else {
+            Delayms(10000);//continue to display temp for readability
+            display_flag = 1;
+            }
+            continue;
+        }
+
+        if(display_flag) {//display instructions again
+            display_flag = 0;
             displayInstructions();
         }
 
-        Delayms(125);
+        Delayms(1000);//wait to allow for even temperature
 
-        // 3.2 compare with initial reading, move bar 1 dot/C
-        pos = 3 + (temp - ref);
-
-        // 3.3 keep result in value range 0..7, keep bar visible
-        if ( pos > 7)
-            pos = 7;
-        if ( pos < 0)
-            pos = 0;
-
-        // 3.4 turn on the corresponding LED
-        PORTA = ( 0x80 >> pos);
     } // main loop
     return 0;
 } // main

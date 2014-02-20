@@ -84,11 +84,11 @@ int InitPPS( void)
 
 void Delayms( unsigned t)
 {
-    T1CON = 0x8000;     // enable tmr1, Tcy, 1:1
+    T3CON = 0x8000;     // enable tmr3, Tcy, 1:1
     while (t--)         // wait for t (msec) 
     {
-        TMR1 = 0;       
-        while ( TMR1 < (FCY/1000)); // wait 1ms
+        TMR3 = 0;
+        while ( TMR3 < (FCY/1000)); // wait 1ms
     }
 } // Delayms
 
@@ -159,12 +159,8 @@ void InitADC( int amask)
     AD1CON1 = 0x00E0;   // auto convert after end of sampling
     AD1CSSL = 0;        // no scanning required 
     AD1CON3 = 0x1F3F;   // max sample time = 31Tad, Tad = 2 x Tcy 
-    AD1CON2 = 0x003C;   // use MUXA, AVss and AVdd are used as Vref+/-
+    AD1CON2 = 0x003C;   // take 16 samples, then interrupt
 
-//    TMR3 = 0x0000; // set TMR3 to time out every 125 ms
-//    PR3 = 0x3FFF;
-//    T3CON = 0x8010;
-    
     AD1CON1bits.ADON = 1; // turn on the ADC
     AD1CON1bits.ASAM = 1; //turn on auto sampling
     
@@ -199,20 +195,18 @@ int averageFifo(void) {
 //this function will take a raw ADC value and convert it's corresponding value
 //in degrees Celsius
 double convertRaw(int temp) {
-    return ((3.3*temp)-500)/10;
+    return ((3.222*(temp))-500)*0.1;
 }
 
 // sample/convert one analog input
 int ReadADC( int ch)
 {
     int temp;
-    AD1CHS  = ch;               // select analog input channel
-    //AD1CON1bits.SAMP = 1;       // start sampling, automatic conversion will follow
-    //while (!AD1CON1bits.DONE);   // wait to complete the conversion
+    AD1CHS  = ch; // select analog input channel
+
     while (!IFS0bits.AD1IF); //check for a finished conversion, full buffer
-    temp = averageFifo();
-//    temp = convertRaw(temp);
-    IFS0bits.AD1IF = 0;
-    return temp;            // read the conversion result
+    temp = averageFifo();//get the average value from the FIFO
+    IFS0bits.AD1IF = 0;//clear the interrupt flag
+    return temp;//return the raw temperature value
 } // readADC
 
